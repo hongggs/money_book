@@ -19,7 +19,6 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
-
     /**
      * 회원가입 요청을 처리하는 메서드입니다.
      * 요청을 검증하고, 회원을 생성한 후 데이터베이스에 저장합니다.
@@ -30,7 +29,7 @@ public class UserService {
     @Transactional
     public CommonResponse<String> signup(UserSignupRequest request) {
         validateSignupRequest(request);
-        String encryptedPassword = passwordEncoder.encode(request.getUsername());
+        String encryptedPassword = passwordEncoder.encode(request.getPassword());
         User user = User.builder()
             .username(request.getUsername())
             .password(encryptedPassword)

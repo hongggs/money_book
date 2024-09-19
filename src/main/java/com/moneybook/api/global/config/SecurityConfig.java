@@ -1,102 +1,101 @@
 package com.moneybook.api.global.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.moneybook.api.global.auth.filter.JwtFilter;
+import com.moneybook.api.global.auth.filter.LoginFilter;
+import com.moneybook.api.global.auth.util.TokenManager;
+import com.moneybook.api.global.error.ErrorCode;
+import com.moneybook.api.global.error.ErrorResponse;
+import com.moneybook.api.global.exception.JwtAuthenticationException;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
+import org.springframework.http.MediaType;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
-import org.springframework.security.web.authentication.AbstractAuthenticationProcessingFilter;
-import org.springframework.security.web.authentication.AuthenticationFailureHandler;
-import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
-import org.springframework.security.web.authentication.logout.LogoutHandler;
-import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-@RequiredArgsConstructor
+@Slf4j
 @Configuration
+@EnableWebSecurity
+@RequiredArgsConstructor
+@EnableMethodSecurity
 public class SecurityConfig {
 
+    private final String[] PERMIT_URL_ARRAY = {
+        "/v3/api-docs/**", "/swagger-ui/**", "/v3/api-docs", "/swagger-ui.html",
+        "/api/error", "/api/user/signup", "/api/user/login", "/api/user/reissue",
+    };
     private final ObjectMapper objectMapper;
-//    private final UserDetailsService userDetailsService;
-//    private final TokenService tokenService;
+    private final AuthenticationConfiguration authenticationConfiguration;
+    private final TokenManager tokenManager;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-            .authorizeHttpRequests(authorizeRequests -> authorizeRequests
-                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/env",
-                    "/hc", "/api/user/signup", "/api/user/login", "/api/user/logout",
-                    "/api/security/reissue")
-                .permitAll() // Swagger, Health Check 관련 경로 허용
-                .anyRequest().authenticated() // 나머지 모든 요청은 인증 필요
+    public SecurityFilterChain filterChain(HttpSecurity httpSecurity) throws Exception {
+        httpSecurity
+            .authorizeHttpRequests(authorize -> authorize
+                .requestMatchers(PERMIT_URL_ARRAY).permitAll()
+                .anyRequest().authenticated()
             )
-            .csrf(csrf -> csrf.disable()) // 전체 CSRF 비활성화
-            .formLogin(formLogin -> formLogin.disable())  // 폼 로그인을 비활성화
-            .httpBasic(httpBasic -> httpBasic.disable())  // HTTP Basic 인증을 비활성화
-            /*
-            .logout(
-                logoutConfigurer -> logoutConfigurer
-                    .logoutUrl("/api/members/logout")
-                    .addLogoutHandler(createLogoutHandler())
-                    .logoutSuccessHandler(createLogoutSuccessHandler())
+            .csrf(AbstractHttpConfigurer::disable)
+            .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(
+                SessionCreationPolicy.STATELESS)
             )
-            .with(
-                new LoginAuthenticationConfigurer<>(createAuthenticationFilter()),
-                SecurityAuthenticationFilter -> SecurityAuthenticationFilter
-                    .successHandler(createAuthenticationSuccessHandler())
-                    .failureHandler(createAuthenticationFailureHandler()))
-            .with(
-                new TokenAuthorityConfigurer(tokenService, userDetailsService),
-                Customizer.withDefaults()
-            )
-            .exceptionHandling(
-                exceptionHandling -> exceptionHandling
-                    .accessDeniedHandler(createAccessDeniedHandler())
-                    .authenticationEntryPoint(createAuthenticationEntryPoint())
-            )
-            */
-            ;
-
-        return http.build();
+            .formLogin(AbstractHttpConfigurer::disable)
+            .logout(AbstractHttpConfigurer::disable)
+            .exceptionHandling(exceptionHandling -> exceptionHandling
+                .authenticationEntryPoint(authenticationEntryPoint)
+                .accessDeniedHandler(accessDeniedHandler))
+            .addFilterBefore(new JwtFilter(tokenManager), UsernamePasswordAuthenticationFilter.class)
+            .addFilterAt(new LoginFilter(objectMapper, authenticationManager(authenticationConfiguration),
+                tokenManager), UsernamePasswordAuthenticationFilter.class);
+        return httpSecurity.build();
     }
 
     @Bean
-    public static PasswordEncoder passwordEncoder() {
+    public BCryptPasswordEncoder bCryptPasswordEncoder() {
         return new BCryptPasswordEncoder();
     }
-    /*
-    private LogoutHandler createLogoutHandler() {
-        return new LogoutTokenHandler(objectMapper, tokenService);
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration)
+        throws Exception {
+        return configuration.getAuthenticationManager();
     }
 
-    private LogoutSuccessHandler createLogoutSuccessHandler() {
-        return new LogoutTokenSuccessHandler(objectMapper);
-    }
+    private final AuthenticationEntryPoint authenticationEntryPoint =
+        (request, response, authException) -> {
+            log.error("인증 실패: {}", authException.getMessage());
+            ErrorCode errorCode = ErrorCode.AUTHENTICATION_FAILED;
+            if (authException instanceof JwtAuthenticationException) {
+                errorCode = ((JwtAuthenticationException) authException).getErrorCode();
+            }
+            sendErrorResponse(response, HttpServletResponse.SC_UNAUTHORIZED, errorCode);
+        };
 
-    private AbstractAuthenticationProcessingFilter createAuthenticationFilter() {
-        return new LoginAuthenticationFilter(objectMapper);
-    }
+    private final AccessDeniedHandler accessDeniedHandler =
+        (request, response, accessDeniedException) ->{
+            log.error("Access Denied: {}", accessDeniedException.getMessage());
+            sendErrorResponse(response, HttpServletResponse.SC_FORBIDDEN, ErrorCode.ACCESS_DENIED);
+        };
 
-    private AuthenticationSuccessHandler createAuthenticationSuccessHandler() {
-        return new LoginAuthenticationSuccessHandler(objectMapper, tokenService);
+    private static void sendErrorResponse(HttpServletResponse response, int status, ErrorCode errorCode) throws IOException {
+        response.setStatus(status);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.getWriter().write(new ObjectMapper().writeValueAsString(new ErrorResponse(errorCode, errorCode.getMessage())));
     }
-
-    private AuthenticationFailureHandler createAuthenticationFailureHandler() {
-        return new LoginAuthenticationFailureHandler(objectMapper);
-    }
-
-    private AccessDeniedHandler createAccessDeniedHandler() {
-        return new SecurityAccessDeniedHandler();
-    }
-
-    private AuthenticationEntryPoint createAuthenticationEntryPoint() {
-        return new SecurityAuthenticationEntryPoint(objectMapper);
-    }
-    */
 }
