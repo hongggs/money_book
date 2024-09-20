@@ -1,16 +1,12 @@
 package com.moneybook.api.global.error;
 
-import static org.springframework.http.HttpStatus.BAD_REQUEST;
-import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
-import static org.springframework.http.HttpStatus.UNAUTHORIZED;
-
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
 @Getter
 public enum ErrorCode {
-    INVALID_INPUT_VALUE(BAD_REQUEST, "유효하지 않은 입력 값입니다."),
-    REDIS_SERVER_ERROR(BAD_REQUEST, "Redis 서버에서 오류가 발생했습니다."),
+    INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "유효하지 않은 입력 값입니다."),
+    REDIS_SERVER_ERROR(HttpStatus.BAD_REQUEST, "Redis 서버에서 오류가 발생했습니다."),
 
     //회원가입
     ACCOUNT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 존재하는 계정입니다."),
@@ -31,6 +27,9 @@ public enum ErrorCode {
     // 사용자
     USER_NOT_FOUND(HttpStatus.BAD_REQUEST, "사용자를 찾을 수 없습니다."),
 
+    //카테고리
+    CATEGORY_NOT_FOUND(HttpStatus.BAD_REQUEST, "카테고리를 찾을 수 없습니다."),
+    CATEGORY_NAME_DUPLICATE(HttpStatus.BAD_REQUEST, "이미 존재하는 카테고리 이름입니다."),
     ;
 
     private final HttpStatus httpStatus;

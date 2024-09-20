@@ -33,6 +33,10 @@ public class CategoryService {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
 
+        categoryRepository.findByUserAndName(user, request.getName()).ifPresent(x -> {
+            throw new CustomException(ErrorCode.CATEGORY_NAME_DUPLICATE);
+        });
+
         Category category = Category.builder()
             .name(request.getName())
             .user(user)
