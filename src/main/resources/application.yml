@@ -15,7 +15,7 @@ spring:
 
   # JPA 설정
   jpa:
-    open-in-view: false
+#    open-in-view: false
     hibernate:
       ddl-auto: update
     properties:
@@ -30,6 +30,13 @@ spring:
       name: admin
       password: admin
 
+  # Redis 설정
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: August8!
+
   # DevTools 설정 (자동 재시작)
   devtools:
     restart:
@@ -38,6 +45,12 @@ spring:
 # logback 설정
 logging:
   config: classpath:logback-${spring.profiles.active}.xml
+
+# JWT 설정
+jwt:
+  secret: 48b1139d703a1d10f9d0f718445fd9ccab85d5169131598f4ac55d913a7e17d7
+  access-token-validate-in-seconds: 3600 # 1시간
+  refresh-token-validate-in-seconds: 604800 # 7일
 
 # Springdoc OpenAPI 설정
 springdoc:
